@@ -1,0 +1,15 @@
+obj/
+bin/*.exe
+bin/*.dll
+bin/*.pdb
+bin/*.ilk
+bin/*.log
+bin/.DS_Store
+.vs/
+.vscode/
+*.user
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.VC.opendb
