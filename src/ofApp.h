@@ -135,6 +135,7 @@ class ofApp : public ofBaseApp{
 		void startGame();
 		ofRectangle startButtonRect() const;
 		ofRectangle tutorialButtonRect() const;
+		bool isTutorialButtonHit(int x, int y) const;
 		void drawProceduralSpaceBackground();
 		void drawNebulaRibbons();
 		void drawHorizonGlow();
@@ -172,6 +173,7 @@ class ofApp : public ofBaseApp{
 		void spawnExplosionParticles(const ofVec3f& position, const ofColor& color, int amount);
 		void startBossFight();
 		void startBossWarning();
+		void createBossCyberpunkTexture();
 		void spawnBossOrb();
 		void spawnBossTarget();
 		void spawnPowerUp(bool startFar = true);
@@ -185,8 +187,11 @@ class ofApp : public ofBaseApp{
 
 		ofVideoPlayer backgroundVideo;
 		ofImage introImage;
+		ofImage tutorialImage;
+		ofImage tutorialButtonImage;
 		ofImage victoryImage;
 		ofImage backgroundStill;
+		ofImage bossProceduralTexture;
 		vector<ofImage> backgroundFrames;
 		ofImage crosshairImage;
 		ofxAssimpModelLoader meteorModel;
@@ -277,6 +282,7 @@ class ofApp : public ofBaseApp{
 		bool meteorUsesRawModel = false;
 		bool shipModelLoaded = false;
 		bool bossModelLoaded = false;
+		bool bossProceduralTextureReady = false;
 		bool backgroundMusicLoaded = false;
 		bool startButtonFontLoaded = false;
 		bool warningTitleFontLoaded = false;

@@ -55,6 +55,8 @@ void ofApp::setup(){
 	aimPosition = mousePosition;
 
 	introImage.load("BG_tela_into.png");
+	tutorialImage.load("TELA_tutorial.jpg");
+	tutorialButtonImage.load("botao_tutorial.png");
 	victoryImage.load("telavitoria.png");
 	backgroundStill.load("custom_bg.png");
 	if (!backgroundStill.isAllocated()) {
@@ -106,10 +108,11 @@ void ofApp::setup(){
 	bossModelLoaded = bossModel.load("nave_boss.obj");
 	if (bossModelLoaded) {
 		bossModel.setScaleNormalization(false);
-		bossModel.enableMaterials();
-		bossModel.enableTextures();
+		bossModel.disableMaterials();
+		bossModel.disableTextures();
 		bossModel.disableCulling();
 	}
+	createBossCyberpunkTexture();
 
 	camera.setPosition(0, 0, 900);
 	camera.lookAt(glm::vec3(0, 0, 0));
@@ -148,6 +151,64 @@ void ofApp::setup(){
 	}
 
 	spawnInitialMeteors();
+}
+
+void ofApp::createBossCyberpunkTexture() {
+	const int texSize = 512;
+	ofPixels pixels;
+	pixels.allocate(texSize, texSize, OF_PIXELS_RGB);
+
+	for (int y = 0; y < texSize; ++y) {
+		for (int x = 0; x < texSize; ++x) {
+			const float nx = x / static_cast<float>(texSize);
+			const float ny = y / static_cast<float>(texSize);
+			const float scan = 0.5f + 0.5f * sinf(ny * 96.0f);
+			const float panel = ((x / 64 + y / 96) % 2 == 0) ? 1.0f : 0.72f;
+			ofColor base(
+				10 + 10 * panel + scan * 7,
+				14 + 18 * panel + scan * 12,
+				28 + 34 * panel + scan * 18
+			);
+
+			const bool fineGrid = (x % 32 == 0) || (y % 32 == 0);
+			const bool majorGrid = (x % 128 < 3) || (y % 128 < 3);
+			const bool diagonalA = abs(((x + y * 2) % 118) - 59) < 2;
+			const bool diagonalB = abs(((x * 2 - y + texSize * 4) % 151) - 75) < 2;
+			const bool circuitNode = (x % 128 < 10 && y % 96 < 10) || (x % 96 > 82 && y % 128 > 114);
+
+			if (fineGrid) {
+				base = base.getLerped(ofColor(35, 215, 255), 0.18f);
+			}
+			if (majorGrid || diagonalA) {
+				base = base.getLerped(ofColor(55, 245, 255), 0.72f);
+			}
+			if (diagonalB) {
+				base = base.getLerped(ofColor(255, 45, 220), 0.66f);
+			}
+			if (circuitNode) {
+				base = base.getLerped(ofColor(255, 225, 90), 0.78f);
+			}
+
+			const float vignette = ofClamp(1.18f - ofDist(nx, ny, 0.5f, 0.5f) * 0.85f, 0.42f, 1.0f);
+			base.r *= vignette;
+			base.g *= vignette;
+			base.b *= vignette;
+			pixels.setColor(x, y, base);
+		}
+	}
+
+	const bool wasUsingArbTex = ofGetUsingArbTex();
+	ofDisableArbTex();
+	bossProceduralTexture.setFromPixels(pixels);
+	if (wasUsingArbTex) {
+		ofEnableArbTex();
+	}
+
+	if (bossProceduralTexture.isAllocated()) {
+		bossProceduralTexture.getTexture().setTextureWrap(GL_REPEAT, GL_REPEAT);
+		bossProceduralTexture.getTexture().setTextureMinMagFilter(GL_LINEAR, GL_LINEAR);
+		bossProceduralTextureReady = true;
+	}
 }
 
 //--------------------------------------------------------------
@@ -482,7 +543,7 @@ void ofApp::mousePressed(int x, int y, int button){
 	}
 
 	if (tutorialActive) {
-		if (tutorialButtonRect().inside(x, y)) {
+		if (isTutorialButtonHit(x, y)) {
 			startGame();
 		}
 		return;
@@ -896,9 +957,37 @@ ofRectangle ofApp::startButtonRect() const {
 }
 
 ofRectangle ofApp::tutorialButtonRect() const {
+	if (tutorialButtonImage.isAllocated()) {
+		const float scale = std::min(0.72f, (ofGetWidth() * 0.58f) / tutorialButtonImage.getWidth());
+		const float w = tutorialButtonImage.getWidth() * scale;
+		const float h = tutorialButtonImage.getHeight() * scale;
+		const ofVec2f center(ofGetWidth() * 0.5f, ofGetHeight() - 78.0f);
+		return ofRectangle(center.x - w * 0.5f, center.y - h * 0.5f, w, h);
+	}
+
 	const float w = 430.0f;
 	const float h = 68.0f;
 	return ofRectangle(ofGetWidth() * 0.5f - w * 0.5f, ofGetHeight() - 112.0f, w, h);
+}
+
+bool ofApp::isTutorialButtonHit(int x, int y) const {
+	const ofRectangle button = tutorialButtonRect();
+	if (!button.inside(x, y)) {
+		return false;
+	}
+
+	if (!tutorialButtonImage.isAllocated()) {
+		return true;
+	}
+
+	const ofPixels& pixels = tutorialButtonImage.getPixels();
+	if (pixels.getNumChannels() < 4) {
+		return true;
+	}
+
+	const int px = ofClamp(static_cast<int>((x - button.x) / button.width * pixels.getWidth()), 0, pixels.getWidth() - 1);
+	const int py = ofClamp(static_cast<int>((y - button.y) / button.height * pixels.getHeight()), 0, pixels.getHeight() - 1);
+	return pixels.getColor(px, py).a > 24;
 }
 
 void ofApp::startGame() {
@@ -1019,6 +1108,42 @@ void ofApp::drawTutorialScreen() {
 	ofEnableAlphaBlending();
 	ofSetColor(255);
 	ofFill();
+
+	if (tutorialImage.isAllocated()) {
+		drawCoverImage(tutorialImage);
+
+		const ofRectangle button = tutorialButtonRect();
+		const bool hover = button.inside(mousePosition);
+		ofPushStyle();
+		ofEnableBlendMode(OF_BLENDMODE_ADD);
+		ofSetColor(55, 235, 255, hover ? 82 : 42);
+		ofDrawRectangle(button.x - 10.0f, button.y - 8.0f, button.width + 20.0f, button.height + 16.0f);
+		ofSetColor(255, 45, 220, hover ? 68 : 28);
+		ofDrawRectangle(button.x - 18.0f, button.y - 5.0f, button.width + 36.0f, button.height + 10.0f);
+		ofEnableBlendMode(OF_BLENDMODE_ALPHA);
+
+		if (tutorialButtonImage.isAllocated()) {
+			ofSetColor(hover ? ofColor(255) : ofColor(238, 246, 255));
+			tutorialButtonImage.draw(button);
+		} else {
+			ofSetColor(6, 0, 24, 225);
+			ofDrawRectangle(button);
+			ofNoFill();
+			ofSetLineWidth(3.0f);
+			ofSetColor(55, 235, 255, hover ? 255 : 190);
+			ofDrawRectangle(button);
+			ofFill();
+			ofSetColor(255);
+			ofDrawBitmapString("INICIAR", button.x + button.width * 0.5f - 28.0f, button.y + button.height * 0.5f + 5.0f);
+		}
+
+		ofSetColor(80, 235, 255, 185);
+		ofDrawBitmapString("ENTER / SPACE tambem inicia  //  ESC volta ao menu", ofGetWidth() * 0.5f - 178.0f, button.y + button.height + 26.0f);
+		ofPopStyle();
+		ofDisableBlendMode();
+		ofEnableAlphaBlending();
+		return;
+	}
 
 	if (introImage.isAllocated()) {
 		drawCoverImage(introImage);
@@ -1347,10 +1472,14 @@ void ofApp::drawBoss() {
 		ofScale(bossModelScale);
 		const glm::vec3 bossCenter = bossModel.getSceneCenterModelSpace();
 		ofTranslate(-bossCenter.x, -bossCenter.y, -bossCenter.z);
-		bossModel.enableMaterials();
-		bossModel.enableTextures();
-		ofSetColor(255);
+		ofSetColor(255, 245);
+		if (bossProceduralTextureReady) {
+			bossProceduralTexture.getTexture().bind();
+		}
 		bossModel.drawFaces();
+		if (bossProceduralTextureReady) {
+			bossProceduralTexture.getTexture().unbind();
+		}
 
 		ofPushStyle();
 		ofEnableBlendMode(OF_BLENDMODE_ADD);
@@ -1361,8 +1490,6 @@ void ofApp::drawBoss() {
 		ofSetColor(wireColor, bossVulnerable ? 235 : 170);
 		ofSetLineWidth(2.0f);
 		bossModel.drawWireframe();
-		bossModel.enableMaterials();
-		bossModel.enableTextures();
 		ofPopStyle();
 		ofPopMatrix();
 	} else {
